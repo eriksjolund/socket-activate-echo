@@ -27,7 +27,7 @@ AF_INET6 | SOCK_DGRAM  | yes
 
 ### About the container image
 
-The container image __ghcr.io/eriksjolund/socket-activate-echo__
+The container image [__ghcr.io/eriksjolund/socket-activate-echo__](https://github.com/eriksjolund/socket-activate-echo/pkgs/container/socket-activate-echo)
 is built by the GitHub Actions workflow [.github/workflows/publish_container_image.yml](.github/workflows/publish_container_image.yml)
 from the file [./Containerfile](./Containerfile).
 
