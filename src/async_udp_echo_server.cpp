@@ -1,3 +1,7 @@
+// This file was first copied from
+// https://github.com/chriskohlhoff/asio/blob/bba12d10501418fd3789ce01c9f86a77d37df7ed/asio/src/examples/cpp14/echo/async_udp_echo_server.cpp
+// and later modified by Erik Sjölund (erik.sjolund@gmail.com)
+
 //
 // async_udp_echo_server.cpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~
