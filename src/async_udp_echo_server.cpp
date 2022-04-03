@@ -17,13 +17,18 @@
 #include <asio/ts/buffer.hpp>
 #include <asio/ts/internet.hpp>
 
-using asio::ip::udp;
 
+template <typename PROTOCOL>
 class server
 {
 public:
-  server(asio::io_context& io_context, short port)
-    : socket_(io_context, udp::endpoint(udp::v4(), port))
+  server(asio::io_context& io_context, const PROTOCOL &prot, bool logdebug, int fd)
+    : socket_{io_context, prot, fd}, logdebug_{logdebug}
+  {
+    do_receive();
+  }
+  server(asio::io_context& io_context, bool logdebug, int fd)
+    : socket_{io_context, fd}, logdebug_{logdebug}
   {
     do_receive();
   }
@@ -34,6 +39,14 @@ public:
         asio::buffer(data_, max_length), sender_endpoint_,
         [this](std::error_code ec, std::size_t bytes_recvd)
         {
+	  if (logdebug_)
+	  {
+	    std::cerr << "Bytes received = " << bytes_recvd << "\n";
+	  }
+          if (ec)
+          {
+            std::cerr << "Error while receiving. Error message = " << ec.message() << "\n";
+          }
           if (!ec && bytes_recvd > 0)
           {
             do_send(bytes_recvd);
@@ -49,39 +62,24 @@ public:
   {
     socket_.async_send_to(
         asio::buffer(data_, length), sender_endpoint_,
-        [this](std::error_code /*ec*/, std::size_t /*bytes_sent*/)
+        [this](std::error_code ec, std::size_t bytes_sent)
         {
+	  if (logdebug_)
+	  {
+	    std::cerr << "Bytes sent = " << bytes_sent << "\n";
+	  }
+          if (ec)
+          {
+            std::cerr << "Error while sending. Error message = " << ec.message() << "\n";
+          }
           do_receive();
         });
   }
 
 private:
-  udp::socket socket_;
-  udp::endpoint sender_endpoint_;
+  const bool logdebug_;
+  PROTOCOL::socket socket_;
+  PROTOCOL::endpoint sender_endpoint_;
   enum { max_length = 1024 };
   char data_[max_length];
 };
-
-int main(int argc, char* argv[])
-{
-  try
-  {
-    if (argc != 2)
-    {
-      std::cerr << "Usage: async_udp_echo_server <port>\n";
-      return 1;
-    }
-
-    asio::io_context io_context;
-
-    server s(io_context, std::atoi(argv[1]));
-
-    io_context.run();
-  }
-  catch (std::exception& e)
-  {
-    std::cerr << "Exception: " << e.what() << "\n";
-  }
-
-  return 0;
-}
