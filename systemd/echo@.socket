@@ -1,0 +1,9 @@
+[Unit]
+Description=socket echoserver for %I
+[Socket]
+
+ListenStream=%h/echoserver_stream_sock.%i
+ListenDatagram=h%/echoserver_datagram_sock.%i
+
+[Install]
+WantedBy=default.target
