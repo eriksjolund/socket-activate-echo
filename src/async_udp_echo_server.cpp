@@ -41,7 +41,7 @@ public:
         {
 	  if (logdebug_)
 	  {
-	    std::cerr << "Bytes received = " << bytes_recvd << "\n";
+	    std::cout << "Bytes received = " << bytes_recvd << std::endl;
 	  }
           if (ec)
           {
@@ -66,7 +66,7 @@ public:
         {
 	  if (logdebug_)
 	  {
-	    std::cerr << "Bytes sent = " << bytes_sent << "\n";
+	    std::cout << "Bytes sent = " << bytes_sent << std::endl;
 	  }
           if (ec)
           {

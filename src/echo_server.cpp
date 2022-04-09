@@ -25,6 +25,7 @@
 #include <asio/local/stream_protocol.hpp>
 #include <asio/local/datagram_protocol.hpp>
 #include <cstdio>
+#include <iostream>
 
 using asio::ip::tcp;
 using asio::awaitable;
@@ -39,7 +40,7 @@ namespace this_coro = asio::this_coro;
 #endif
 
 template<typename T >
-awaitable<void> echo(T socket)
+awaitable<void> echo(T socket, bool logdebug)
 {
   try
   {
@@ -47,7 +48,15 @@ awaitable<void> echo(T socket)
     for (;;)
     {
       std::size_t n = co_await socket.async_read_some(asio::buffer(data), use_awaitable);
+      if (logdebug)
+      {
+        std::cout << "Bytes received = " << n << std::endl;
+      }
       co_await async_write(socket, asio::buffer(data, n), use_awaitable);
+      if (logdebug)
+      {
+        std::cout << "Bytes sent = " << n << std::endl;
+      }
     }
   }
   catch (std::exception& e)
@@ -56,16 +65,16 @@ awaitable<void> echo(T socket)
   }
 }
 
-awaitable<void> listener(int fd)
+awaitable<void> listener(int fd, bool logdebug)
 {
   auto executor = co_await this_coro::executor;
   static const asio::local::stream_protocol prot;
   if (sd_is_socket(fd, AF_UNIX, SOCK_STREAM, 1)) {
-    asio::basic_socket_acceptor   acceptor{executor, prot, fd};
+    asio::basic_socket_acceptor acceptor{executor, prot, fd};
     for (;;)
     {
       asio::local::stream_protocol::socket socket = co_await acceptor.async_accept(use_awaitable);
-      co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket)), detached);
+      co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket), logdebug), detached);
     }
   }
   if (sd_is_socket(fd, AF_INET, SOCK_STREAM, 1)) {
@@ -73,7 +82,7 @@ awaitable<void> listener(int fd)
     for (;;)
     {
       tcp::socket socket = co_await acceptor.async_accept(use_awaitable);
-      co_spawn(executor, echo<tcp::socket>(std::move(socket)), detached);
+      co_spawn(executor, echo<tcp::socket>(std::move(socket), logdebug), detached);
     }
   }
   if (sd_is_socket(fd, AF_INET6, SOCK_STREAM, 1)) {
@@ -81,7 +90,7 @@ awaitable<void> listener(int fd)
     for (;;)
     {
       tcp::socket socket = co_await acceptor.async_accept(use_awaitable);
-      co_spawn(executor, echo<tcp::socket>(std::move(socket)), detached);
+      co_spawn(executor, echo<tcp::socket>(std::move(socket), logdebug), detached);
     }
   }
 }
@@ -138,7 +147,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_fds; i++) {
       int fd = SD_LISTEN_FDS_START + i;
       if (sd_is_socket(fd, AF_UNSPEC, SOCK_STREAM, 1)) {
-	co_spawn(io_context, listener(fd), detached);
+	co_spawn(io_context, listener(fd, logdebug), detached);
       } else
       if (sd_is_socket(fd, AF_UNIX, SOCK_DGRAM, -1)) {
         unix_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, logdebug, fd));
