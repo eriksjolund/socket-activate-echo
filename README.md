@@ -112,9 +112,15 @@ from the file [./Containerfile](./Containerfile).
 
 ### Troubleshooting
 
-If __socat__ does not receive any reply within a certain time it might terminate before getting the reply. The timeout is __0.5 seconds__ by default.
+#### The container takes long time to start
 
-This could happen if the container image  __ghcr.io/eriksjolund/socket-activate-echo__ needs to be pulled when `podman run` starts. Downloading the container image might take longer than the configured timeout. Symptoms of this could be
+Pulling a container image may take long time. This delay can be avoided by pulling the container
+image beforehand and adding the command-line option `--pull=never` to `podman run`.
+
+#### socat times out before receiving the reply
+
+If __socat__ does not receive any reply within a certain time limit it terminates before getting the reply. The timeout is __0.5 seconds__ by default.
+Symptoms of this could be
 
 ```
 $ systemctl --user start echo@demo.socket
@@ -123,12 +129,22 @@ $ echo hello | socat - udp4:127.0.0.1:3000
 hello
 ```
 
-To work around the problem, you could for instance pull the image beforehand and add the command-line option `--pull=never` to `podman run`. Another solution is to increase the socat timeout. To configure the timeout to be 30 seconds, add the command-line option `-t 30`.
+To configure the timeout to be 30 seconds, add the command-line option `-t 30`.
 
 ```
 $ echo hello | socat -t 30 - udp4:127.0.0.1:3000
 hello
 ```
+
+Another way to handle the problem is to use the command-line option __readline__ to get an interactive user interface. Type the word _hello_  and see it being echoed back. 
+
+```
+$ socat readline udp4:127.0.0.1:3000
+hello
+hello
+```
+
+In this case there will be no timeout because none of the channels have reached EOF.
 
 A good way to diagnose problems is to look in the journald log for the service:
 
