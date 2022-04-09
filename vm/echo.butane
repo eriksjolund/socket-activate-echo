@@ -1,0 +1,92 @@
+variant: fcos
+version: 1.4.0
+passwd:
+  users:
+    - name: core
+
+systemd:
+  units:
+    - name: serial-getty@ttyS0.service
+      dropins:
+      - name: autologin-core.conf
+        contents: |
+          [Service]
+          ExecStart=
+          ExecStart=-/usr/sbin/agetty --autologin core --noclear %I $TERM
+storage:
+  files:
+    - path: /var/lib/systemd/linger/core
+      mode: 0644
+    - path: /home/core/.config/systemd/user/echo@.service
+      user:
+        name: core
+      group:
+        name: core
+      mode: 0644
+      contents:
+        local: echo@.service
+    - path: /home/core/.config/systemd/user/echo@.socket
+      user:
+        name: core
+      group:
+        name: core
+      mode: 0644
+      contents:
+        local: echo@.socket
+    - path: /home/core/.config/systemd/user/echo@demo.socket.d/override.conf
+      user:
+        name: core
+      group:
+        name: core
+      mode: 0644
+      contents:
+        local: echo@demo.socket.d/override.conf
+    - path: /etc/sysctl.d/20-adjust-printk.conf
+      mode: 0644
+      contents:
+        inline: |
+          kernel.printk=4
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: |
+          fcos
+  directories:
+    - path: /home/core/.config
+      mode: 0755
+      user:
+        name: core
+      group:
+        name: core
+    - path: /home/core/.config/systemd
+      mode: 0755
+      user:
+        name: core
+      group:
+        name: core
+    - path: /home/core/.config/systemd/user
+      mode: 0755
+      user:
+        name: core
+      group:
+        name: core
+    - path: /home/core/.config/systemd/user/default.target.wants
+      mode: 0755
+      user:
+        name: core
+      group:
+        name: core
+    - path: /home/core/.config/systemd/user/echo@demo.socket.d
+      mode: 0755
+      user:
+        name: core
+      group:
+        name: core
+  links:
+    - path: /home/core/.config/systemd/user/default.target.wants/echo@demo.socket
+      user:
+        name: core
+      group:
+        name: core
+      target: /home/core/.config/systemd/user/echo@.socket
+      hard: false

@@ -34,6 +34,7 @@ jobs:
             latest=auto
           tags: |
             type=sha,format=long
+            type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
