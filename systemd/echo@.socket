@@ -3,7 +3,7 @@ Description=socket socket-activate-echo for %I
 [Socket]
 
 ListenStream=%h/echo_stream_sock.%i
-ListenDatagram=h%/echo_datagram_sock.%i
+ListenDatagram=%h/echo_datagram_sock.%i
 
 [Install]
 WantedBy=default.target
