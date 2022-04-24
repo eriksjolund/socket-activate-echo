@@ -19,7 +19,7 @@ AF_INET6 | SOCK_DGRAM  | yes
 
 If you are using an older version of __container-selinux__ and it does not work, add `--security-opt label=disable` to `podman run`.
 
-:exclamation: __container-selinux 2.183.0__ is currently only available in Fedora Rawhide (see [packages.fedoraproject.org](https://packages.fedoraproject.org/pkgs/container-selinux/container-selinux/)). It might take a while before the release is available in Fedora 35, Fedora 36 and Fedora CoreOS (next).
+:exclamation: __container-selinux 2.183.0__ is currently only available in Fedora Rawhide. It might take a while before the release is available in Fedora 35, Fedora 36 and Fedora CoreOS (next).
 
 ### Installation
 
