@@ -7,6 +7,7 @@ family   | type        | support
 AF_UNIX  | SOCK_STREAM | yes
 AF_INET  | SOCK_STREAM | yes
 AF_INET6 | SOCK_STREAM | yes
+AF_VSOCK | SOCK_STREAM | yes
 AF_UNIX  | SOCK_DGRAM  | yes (but no support for outgoing traffic when run in container because the client socket path on the host is not accessible from within the container) 
 AF_INET  | SOCK_DGRAM  | yes
 AF_INET6 | SOCK_DGRAM  | yes
@@ -14,9 +15,11 @@ AF_INET6 | SOCK_DGRAM  | yes
 ### Requirements
 
 * __podman__  version 3.4.0 (released September 2021) or newer
-* __container-selinux__ version 2.181.0 (released March 2022) or newer
+* __container-selinux__ version 2.183.0 (released April 2022) or newer
 
-(If you are using an older version of __container-selinux__ and it does not work, add `--security-opt label=disable` to `podman run`)
+If you are using an older version of __container-selinux__ and it does not work, add `--security-opt label=disable` to `podman run`.
+
+:exclamation: __container-selinux 2.183.0__ is currently only available in Fedora Rawhide (see [packages.fedoraproject.org](https://packages.fedoraproject.org/pkgs/container-selinux/container-selinux/)). It might take a while before the release is available in Fedora 35, Fedora 36 and Fedora CoreOS (next).
 
 ### Installation
 
@@ -54,6 +57,8 @@ from the file [./Containerfile](./Containerfile).
     hello
     $ echo hello | socat - unix:$HOME/echo_stream_sock.demo
     hello
+    $ echo hello | socat - VSOCK-CONNECT:1:3000
+    hello
     ```
 
 3. Try establishing an outgoing connection
@@ -68,8 +73,12 @@ from the file [./Containerfile](./Containerfile).
 
 1. Socket activate the echo server
     ```
-    systemd-socket-activate -l /tmp/stream.sock -l 4000 podman run --rm --name echo2 --network=none ghcr.io/eriksjolund/socket-activate-echo
+    systemd-socket-activate -l /tmp/stream.sock \
+        -l 4000 -l vsock:4294967295:4000 podman run --rm --name echo2 \
+        --network=none ghcr.io/eriksjolund/socket-activate-echo
     ```
+    Instead of _VMADDR_CID_ANY_ (4294967295) we could also have used _VMADDR_CID_LOCAL_ (1), in other words,
+    `-l vsock:1:4000` (see [`man 7 vsock`](https://man7.org/linux/man-pages/man7/vsock.7.html)).
 
 2. In another shell
     ```
@@ -78,6 +87,8 @@ from the file [./Containerfile](./Containerfile).
     $ echo hello | socat - tcp4:127.0.0.1:4000
     hello
     $ echo hello | socat - tcp6:[::1]:4000
+    hello
+    $ echo hello | socat - VSOCK-CONNECT:1:4000
     hello
     ```
 
@@ -92,7 +103,9 @@ from the file [./Containerfile](./Containerfile).
 
 1. Socket activate the echo server
     ```
-    systemd-socket-activate --datagram -l 5000 podman run --rm --name echo3 --network=none ghcr.io/eriksjolund/socket-activate-echo
+    systemd-socket-activate --datagram \
+        -l 5000 podman run --rm --name echo3 \
+        --network=none ghcr.io/eriksjolund/socket-activate-echo
     ```
 
 2. In another shell
@@ -109,6 +122,41 @@ from the file [./Containerfile](./Containerfile).
     curl: (6) Could not resolve host: podman.io
     $
     ```
+
+### Run the echo container inside a VM and connect over AF_VSOCK (SOCK_STREAM)
+
+1. Install requirements
+
+    ```
+    sudo dnf install -y qemu butane coreos-installer
+    ```
+
+2.  Start the Fedora CoreOS VM by running these commands on the host
+
+    ```
+    STREAM=next
+    CID=20
+    mkdir -p ~/.local/share/libvirt/images/
+    file=$(coreos-installer download -s "${STREAM}" -p qemu -f qcow2.xz --decompress -C ~/.local/share/libvirt/images/)
+    cat vm/echo.butane | butane --strict --pretty --files-dir systemd > file.ign
+    qemu-kvm -m 2048 \
+      -device "vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=$CID" \
+      -cpu host -nographic -snapshot \
+      -drive "if=virtio,file=$file" \
+      -fw_cfg name=opt/com.coreos/config,file=file.ign -nic "user,model=virtio"
+    ```
+
+    The Context Identifier (CID) is an arbitrary number that is used to identify the VM (see `man vsock`).
+
+3.  Run on the host
+    ```
+     $ CID=20
+     $ echo hello | socat -t 30 - VSOCK-CONNECT:$CID:3000
+     hello
+    ```
+    (Until __container-selinux 2.183.0__ lands in the [Fedora CoreOS next stream](https://getfedora.org/en/coreos?stream=next)
+    this echo example will not work unless `--security-opt label=disable` is added to the `podman run` command in
+    [systemd/echo@.service](systemd/echo@.service))
 
 ### Troubleshooting
 

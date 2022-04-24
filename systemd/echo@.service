@@ -18,7 +18,6 @@ ExecStart=/usr/bin/podman run \
   --name echo-%i \
   --detach \
   --network none \
-  --userns=keep-id \
     ghcr.io/eriksjolund/socket-activate-echo
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm -f --ignore --cidfile=%t/%n.ctr-id

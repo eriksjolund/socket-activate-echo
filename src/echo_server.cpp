@@ -77,6 +77,14 @@ awaitable<void> listener(int fd, bool logdebug)
       co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket), logdebug), detached);
     }
   }
+  if (sd_is_socket(fd, AF_VSOCK, SOCK_STREAM, 1)) {
+    asio::basic_socket_acceptor acceptor{executor, prot, fd};
+    for (;;)
+    {
+      asio::local::stream_protocol::socket socket = co_await acceptor.async_accept(use_awaitable);
+      co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket), logdebug), detached);
+    }
+  }
   if (sd_is_socket(fd, AF_INET, SOCK_STREAM, 1)) {
     asio::basic_socket_acceptor acceptor{executor, asio::ip::tcp::v4(), fd};
     for (;;)
@@ -143,6 +151,7 @@ int main(int argc, char *argv[])
     std::vector < std::unique_ptr < server < asio::ip::udp > > > udp_servers;
     static const asio::local::datagram_protocol datagram_prot;
     std::vector < std::unique_ptr < server < asio::local::datagram_protocol > > > unix_dgram_servers;
+    std::vector < std::unique_ptr < server < asio::local::datagram_protocol > > > vsock_dgram_servers;
 
     for (int i = 0; i < num_fds; i++) {
       int fd = SD_LISTEN_FDS_START + i;
@@ -151,6 +160,9 @@ int main(int argc, char *argv[])
       } else
       if (sd_is_socket(fd, AF_UNIX, SOCK_DGRAM, -1)) {
         unix_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, logdebug, fd));
+      } else
+      if (sd_is_socket(fd, AF_VSOCK, SOCK_DGRAM, -1)) {
+        vsock_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, logdebug, fd));
       } else
       if (sd_is_socket(fd, AF_INET, SOCK_DGRAM, -1)) {
         udp_servers.push_back(std::make_unique< server< asio::ip::udp > >(io_context,asio::ip::udp::v4(), logdebug, fd));
