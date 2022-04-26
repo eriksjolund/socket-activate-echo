@@ -19,8 +19,6 @@ AF_INET6 | SOCK_DGRAM  | yes
 
 If you are using an older version of __container-selinux__ and it does not work, add `--security-opt label=disable` to `podman run`.
 
-:exclamation: __container-selinux 2.183.0__ is currently only available in Fedora Rawhide. It might take a while before the release is available in Fedora 35, Fedora 36 and Fedora CoreOS (next).
-
 ### Installation
 
 1. Install __socat__
@@ -125,6 +123,10 @@ from the file [./Containerfile](./Containerfile).
 
 ### Run the echo container inside a VM and connect over AF_VSOCK (SOCK_STREAM)
 
+    (Until __container-selinux 2.183.0__ lands in the [Fedora CoreOS next stream](https://getfedora.org/en/coreos?stream=next)
+    this echo example will not work unless `--security-opt label=disable` is added to the `podman run` command in
+    [systemd/echo@.service](systemd/echo@.service))
+
 1. Install requirements
 
     ```
@@ -154,9 +156,6 @@ from the file [./Containerfile](./Containerfile).
      $ echo hello | socat -t 30 - VSOCK-CONNECT:$CID:3000
      hello
     ```
-    (Until __container-selinux 2.183.0__ lands in the [Fedora CoreOS next stream](https://getfedora.org/en/coreos?stream=next)
-    this echo example will not work unless `--security-opt label=disable` is added to the `podman run` command in
-    [systemd/echo@.service](systemd/echo@.service))
 
 ### Troubleshooting
 
