@@ -123,10 +123,6 @@ from the file [./Containerfile](./Containerfile).
 
 ### Run the echo container inside a VM and connect over AF_VSOCK (SOCK_STREAM)
 
-    (Until __container-selinux 2.183.0__ lands in the [Fedora CoreOS next stream](https://getfedora.org/en/coreos?stream=next)
-    this echo example will not work unless `--security-opt label=disable` is added to the `podman run` command in
-    [systemd/echo@.service](systemd/echo@.service))
-
 1. Install requirements
 
     ```
