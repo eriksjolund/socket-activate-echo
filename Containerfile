@@ -15,4 +15,8 @@ FROM docker.io/library/ubuntu:22.04
 
 RUN apt-get update && apt-get install -y curl iproute2
 COPY --from=builder /socket-activate-echo /socket-activate-echo
+# 65534:65534 is "nobody:nogroup" in Ubuntu. The systemd project recommends using "nobody:nobody"
+# (see https://systemd.io/UIDS-GIDS/).
+# Let's use the numeric UID / GID, to avoid being dependent on the stability of the group name.
+USER 65534:65534
 CMD ["/socket-activate-echo", "--debug"]
