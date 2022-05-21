@@ -7,6 +7,12 @@ COPY src src
 RUN cd /src && g++ -std=c++20 echo_server.cpp -lsystemd -o /socket-activate-echo
 
 FROM docker.io/library/ubuntu:22.04
-RUN apt-get update && apt-get install -y curl
+# The packages curl and iproute2 are just installed to provide
+# easy access to the commands /usr/bin/curl and /usr/sbin/ip
+# for demonstration purposes of --network=none
+# Those packages are not required for the functionality of
+# the echo server.
+
+RUN apt-get update && apt-get install -y curl iproute2
 COPY --from=builder /socket-activate-echo /socket-activate-echo
 CMD ["/socket-activate-echo", "--debug"]
