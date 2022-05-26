@@ -9,7 +9,7 @@ Environment=PODMAN_SYSTEMD_UNIT=%n-%i
 Restart=on-failure
 TimeoutStopSec=70
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
-ExecStart=/usr/bin/podman run \
+ExecStart=/usr/bin/podman run --runtime crun \
   --cidfile=%t/%n.ctr-id \
   --cgroups=no-conmon \
   --rm \
