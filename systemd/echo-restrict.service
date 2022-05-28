@@ -2,6 +2,8 @@
 Description=socket-activate-echo with RestrictAddressFamilies
 Wants=network-online.target
 After=network-online.target
+BindsTo=podman-usernamespace.service
+After=podman-usernamespace.service
 RequiresMountsFor=%t/containers
 
 [Service]
@@ -9,6 +11,7 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=on-failure
 TimeoutStopSec=70
 RestrictAddressFamilies=AF_UNIX AF_NETLINK
+NoNewPrivileges=yes
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman --runtime runc run \
   --cidfile=%t/%n.ctr-id \
