@@ -38,7 +38,7 @@ from the file [./Containerfile](./Containerfile).
     ```
     git clone https://github.com/eriksjolund/socket-activate-echo.git
     mkdir -p ~/.config/systemd/user
-    cp -r socket-activate-echo/systemd/echo* ~/.config/systemd/user
+    cp -r socket-activate-echo/systemd/* ~/.config/systemd/user
     systemctl --user daemon-reload
     systemctl --user start echo@demo.socket
     ```

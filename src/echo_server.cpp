@@ -105,44 +105,63 @@ awaitable<void> listener(int fd, bool logdebug)
 
 #include "./async_udp_echo_server.cpp"
 
-bool parse_argv_logdebug_enabled(int argc, char *argv[])
+struct ParsedArgs
 {
-  if (argc == 2 && std::string_view(argv[1]) == "--debug")
-  {
-    return true;
+  bool debug;
+  bool sdnotify;
+};
+
+ParsedArgs parse_argv(int argc, char *argv[])
+{
+  bool debug = false;
+  bool sdnotify = false;
+
+  bool error_found = false;
+  if (argc == 0) {
+    error_found = true;
   }
-  return false;
+  for (int i = 1; i != argc; ++i) {
+    if (std::string_view(argv[i]) == "--debug" || std::string_view(argv[i]) == "-d") {
+      debug = true;
+    } else
+    if (std::string_view(argv[i]) == "--sdnotify" || std::string_view(argv[i]) == "-s") {
+      sdnotify = false;
+    } else {
+      error_found = true;
+      break;
+    }
+  }
+  if (error_found) {
+    throw std::runtime_error("Incorrect command-line arguments. See --help for usage");
+  }
+  return ParsedArgs{debug, sdnotify};
 }
 
 void print_usage(FILE *f)
 {
   fprintf(f, "Usage: socket-activate-echo [OPTION]\n"
-             "-h, --help        print help\n"
-             "-d, --debug       enable verbose debug output\n\n"
+             "-h, --help             print help\n"
+             "-d, --debug            enable verbose debug output\n"
+             "-s, --sdnotify         enable sd_notify\n\n"
              "To use the echo server functionality, let this program be started by a systemd service or systemd-socket-activate.\n");
 }
 
 int main(int argc, char *argv[])
 {
-  if (argc == 2 && std::string_view(argv[1]) == "--help") {
+  if (argc == 2 && (std::string_view(argv[1]) == "--help" || std::string_view(argv[1]) == "-h")) {
     print_usage(stdout);
     exit(EXIT_SUCCESS);
-  }
-  const bool logdebug = parse_argv_logdebug_enabled(argc, argv);
-
-  if (argc > 2 || (argc == 2 && std::string_view(argv[1]) != "--help" && std::string_view(argv[1]) != "--debug")) {
-    print_usage(stderr);
-    exit(EXIT_FAILURE);
-  }
-
-  int num_fds = sd_listen_fds(1);
-  if (num_fds < 1) {
-    perror("This program needs to be started by a systemd service or by systemd-socket-activate. (LISTEN_FDS is not correctly set)");
-    exit(EXIT_FAILURE);
   }
 
   try
   {
+    const ParsedArgs parsed_args = parse_argv(argc, argv);
+
+    int num_fds = sd_listen_fds(1);
+    if (num_fds < 1) {
+      throw std::runtime_error("This program needs to be started by a systemd service or by systemd-socket-activate. (LISTEN_FDS is not correctly set)");
+    }
+
     asio::io_context io_context(1);
 
     asio::signal_set signals(io_context, SIGINT, SIGTERM);
@@ -156,25 +175,30 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_fds; i++) {
       int fd = SD_LISTEN_FDS_START + i;
       if (sd_is_socket(fd, AF_UNSPEC, SOCK_STREAM, 1)) {
-	co_spawn(io_context, listener(fd, logdebug), detached);
+	co_spawn(io_context, listener(fd, parsed_args.debug), detached);
       } else
       if (sd_is_socket(fd, AF_UNIX, SOCK_DGRAM, -1)) {
-        unix_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, logdebug, fd));
+        unix_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, parsed_args.debug, fd));
       } else
       if (sd_is_socket(fd, AF_VSOCK, SOCK_DGRAM, -1)) {
-        vsock_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, logdebug, fd));
+        vsock_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, parsed_args.debug, fd));
       } else
       if (sd_is_socket(fd, AF_INET, SOCK_DGRAM, -1)) {
-        udp_servers.push_back(std::make_unique< server< asio::ip::udp > >(io_context,asio::ip::udp::v4(), logdebug, fd));
+        udp_servers.push_back(std::make_unique< server< asio::ip::udp > >(io_context,asio::ip::udp::v4(), parsed_args.debug, fd));
       } else
       if (sd_is_socket(fd, AF_INET6, SOCK_DGRAM, -1)) {
-	udp_servers.push_back(std::make_unique< server < asio::ip::udp > >(io_context,asio::ip::udp::v6(), logdebug, fd));
+	udp_servers.push_back(std::make_unique< server < asio::ip::udp > >(io_context,asio::ip::udp::v6(), parsed_args.debug, fd));
       }
+    }
+    if (parsed_args.sdnotify) {
+      sd_notify(0, "READY=1");
     }
     io_context.run();
   }
   catch (std::exception& e)
   {
-    std::printf("Exception: %s\n", e.what());
+    std::fprintf(stderr, "Error: %s\n", e.what());
+    exit(EXIT_FAILURE);
   }
+  return EXIT_SUCCESS;
 }

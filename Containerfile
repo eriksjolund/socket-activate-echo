@@ -19,4 +19,4 @@ COPY --from=builder /socket-activate-echo /socket-activate-echo
 # (see https://systemd.io/UIDS-GIDS/).
 # Let's use the numeric UID / GID, to avoid being dependent on the stability of the group name.
 USER 65534:65534
-CMD ["/socket-activate-echo", "--debug"]
+CMD ["/socket-activate-echo"]
