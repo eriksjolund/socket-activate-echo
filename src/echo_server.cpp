@@ -125,7 +125,7 @@ ParsedArgs parse_argv(int argc, char *argv[])
       debug = true;
     } else
     if (std::string_view(argv[i]) == "--sdnotify" || std::string_view(argv[i]) == "-s") {
-      sdnotify = false;
+      sdnotify = true;
     } else {
       error_found = true;
       break;
