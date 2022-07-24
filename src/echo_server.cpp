@@ -26,6 +26,7 @@
 #include <asio/local/datagram_protocol.hpp>
 #include <cstdio>
 #include <iostream>
+#include <charconv>
 
 using asio::ip::tcp;
 using asio::awaitable;
@@ -50,12 +51,12 @@ awaitable<void> echo(T socket, bool logdebug)
       std::size_t n = co_await socket.async_read_some(asio::buffer(data), use_awaitable);
       if (logdebug)
       {
-        std::cout << "Bytes received = " << n << std::endl;
+        std::cerr << "Bytes received = " << n << std::endl;
       }
       co_await async_write(socket, asio::buffer(data, n), use_awaitable);
       if (logdebug)
       {
-        std::cout << "Bytes sent = " << n << std::endl;
+        std::cerr << "Bytes sent = " << n << std::endl;
       }
     }
   }
@@ -109,41 +110,67 @@ struct ParsedArgs
 {
   bool debug;
   bool sdnotify;
+  unsigned int start_sleep;
 };
 
 ParsedArgs parse_argv(int argc, char *argv[])
 {
   bool debug = false;
   bool sdnotify = false;
-
+  unsigned int start_sleep = 0;
   bool error_found = false;
   if (argc == 0) {
     error_found = true;
   }
-  for (int i = 1; i != argc; ++i) {
+  { int i = 1;
+    while (i < argc) {
+    if (std::string_view(argv[i]) == "--start-sleep" || std::string_view(argv[i]) == "-t") {
+      if (i + 1 < argc) {
+	std::string_view const str(argv[i + 1]);
+	auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), start_sleep);
+        if (ec != std::errc{}) {
+          throw std::runtime_error("--start-sleep value is not an unsigned integer");
+	}
+	++i;
+      } else {
+        throw std::runtime_error("--start-sleep expects a value");
+      }
+    } else
     if (std::string_view(argv[i]) == "--debug" || std::string_view(argv[i]) == "-d") {
       debug = true;
     } else
     if (std::string_view(argv[i]) == "--sdnotify" || std::string_view(argv[i]) == "-s") {
-      sdnotify = false;
+      sdnotify = true;
     } else {
       error_found = true;
       break;
     }
-  }
+    ++i;
+    }}
   if (error_found) {
     throw std::runtime_error("Incorrect command-line arguments. See --help for usage");
   }
-  return ParsedArgs{debug, sdnotify};
+  return ParsedArgs{debug, sdnotify, start_sleep};
 }
 
 void print_usage(FILE *f)
 {
   fprintf(f, "Usage: socket-activate-echo [OPTION]\n"
-             "-h, --help             print help\n"
-             "-d, --debug            enable verbose debug output\n"
-             "-s, --sdnotify         enable sd_notify\n\n"
+             "-h, --help                        print help\n"
+             "-d, --debug                       print debug output to stderr\n"
+             "-s, --sdnotify                    enable sd_notif\n"
+	     "-t, --start-sleep seconds         add start sleep (unsigned int)\n\n"
              "To use the echo server functionality, let this program be started by a systemd service or systemd-socket-activate.\n");
+}
+
+
+void log_sd_notify(std::string msg, bool sdnotify, bool logdebug) {
+  if (sdnotify) {
+    sd_notify(0, msg.c_str());
+    if (logdebug) {
+      std::cerr << "sd_notify(0,\"" << msg << "\");\n";
+    }
+  }
 }
 
 int main(int argc, char *argv[])
@@ -190,9 +217,17 @@ int main(int argc, char *argv[])
 	udp_servers.push_back(std::make_unique< server < asio::ip::udp > >(io_context,asio::ip::udp::v6(), parsed_args.debug, fd));
       }
     }
-    if (parsed_args.sdnotify) {
-      sd_notify(0, "READY=1");
+    if (parsed_args.start_sleep) {
+      const std::string msg = std::string("Sleeping ") + std::to_string(parsed_args.start_sleep) +
+                              " second(s) as specified by the --start-sleep (-t) option";
+      if (parsed_args.debug) {
+        std::cerr << msg << "\n";
+      }
+      log_sd_notify("STATUS=" + msg, parsed_args.sdnotify, parsed_args.debug);
+      sleep(parsed_args.start_sleep);
     }
+    log_sd_notify("READY=1", parsed_args.sdnotify, parsed_args.debug);
+    log_sd_notify ("STATUS=Server is ready", parsed_args.sdnotify, parsed_args.debug);
     io_context.run();
   }
   catch (std::exception& e)
