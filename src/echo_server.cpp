@@ -27,6 +27,9 @@
 #include <cstdio>
 #include <iostream>
 #include <charconv>
+#include <optional>
+#include <ranges>
+#include <vector>
 
 using asio::ip::tcp;
 using asio::awaitable;
@@ -40,8 +43,20 @@ namespace this_coro = asio::this_coro;
   asio::use_awaitable_t(__FILE__, __LINE__, __PRETTY_FUNCTION__)
 #endif
 
+void log_handled_bytes(int num_bytes, std::string handled, std::optional< std::string > fdname, bool logdebug)
+{
+      if (logdebug)
+      {
+        std::cout << "Bytes " << handled << " = " << num_bytes;
+        if (fdname.has_value()) {
+          std::cout << ", File descriptor name = \"" << fdname.value() << "\"";
+        }
+        std::cout << std::endl;
+      }
+}
+
 template<typename T >
-awaitable<void> echo(T socket, bool logdebug)
+awaitable<void> echo(T socket, bool logdebug, std::optional< std::string > fdname)
 {
   try
   {
@@ -49,15 +64,9 @@ awaitable<void> echo(T socket, bool logdebug)
     for (;;)
     {
       std::size_t n = co_await socket.async_read_some(asio::buffer(data), use_awaitable);
-      if (logdebug)
-      {
-        std::cerr << "Bytes received = " << n << std::endl;
-      }
+      log_handled_bytes(n, "received", fdname, logdebug);
       co_await async_write(socket, asio::buffer(data, n), use_awaitable);
-      if (logdebug)
-      {
-        std::cerr << "Bytes sent = " << n << std::endl;
-      }
+      log_handled_bytes(n, "sent", fdname, logdebug);
     }
   }
   catch (std::exception& e)
@@ -66,7 +75,7 @@ awaitable<void> echo(T socket, bool logdebug)
   }
 }
 
-awaitable<void> listener(int fd, bool logdebug)
+awaitable<void> listener(int fd, bool logdebug, std::optional< std::string > fdname)
 {
   auto executor = co_await this_coro::executor;
   static const asio::local::stream_protocol prot;
@@ -75,7 +84,7 @@ awaitable<void> listener(int fd, bool logdebug)
     for (;;)
     {
       asio::local::stream_protocol::socket socket = co_await acceptor.async_accept(use_awaitable);
-      co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket), logdebug), detached);
+      co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket), logdebug, fdname), detached);
     }
   }
   if (sd_is_socket(fd, AF_VSOCK, SOCK_STREAM, 1)) {
@@ -83,7 +92,7 @@ awaitable<void> listener(int fd, bool logdebug)
     for (;;)
     {
       asio::local::stream_protocol::socket socket = co_await acceptor.async_accept(use_awaitable);
-      co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket), logdebug), detached);
+      co_spawn(executor, echo<asio::local::stream_protocol::socket>(std::move(socket), logdebug, fdname), detached);
     }
   }
   if (sd_is_socket(fd, AF_INET, SOCK_STREAM, 1)) {
@@ -91,7 +100,7 @@ awaitable<void> listener(int fd, bool logdebug)
     for (;;)
     {
       tcp::socket socket = co_await acceptor.async_accept(use_awaitable);
-      co_spawn(executor, echo<tcp::socket>(std::move(socket), logdebug), detached);
+      co_spawn(executor, echo<tcp::socket>(std::move(socket), logdebug, fdname), detached);
     }
   }
   if (sd_is_socket(fd, AF_INET6, SOCK_STREAM, 1)) {
@@ -99,7 +108,7 @@ awaitable<void> listener(int fd, bool logdebug)
     for (;;)
     {
       tcp::socket socket = co_await acceptor.async_accept(use_awaitable);
-      co_spawn(executor, echo<tcp::socket>(std::move(socket), logdebug), detached);
+      co_spawn(executor, echo<tcp::socket>(std::move(socket), logdebug, fdname), detached);
     }
   }
 }
@@ -158,19 +167,45 @@ void print_usage(FILE *f)
   fprintf(f, "Usage: socket-activate-echo [OPTION]\n"
              "-h, --help                        print help\n"
              "-d, --debug                       print debug output to stderr\n"
-             "-s, --sdnotify                    enable sd_notif\n"
+             "-s, --sdnotify                    enable sd_notify\n"
 	     "-t, --start-sleep seconds         add start sleep (unsigned int)\n\n"
              "To use the echo server functionality, let this program be started by a systemd service or systemd-socket-activate.\n");
 }
-
 
 void log_sd_notify(std::string msg, bool sdnotify, bool logdebug) {
   if (sdnotify) {
     sd_notify(0, msg.c_str());
     if (logdebug) {
-      std::cerr << "sd_notify(0,\"" << msg << "\");\n";
+      std::cout << "sd_notify(0,\"" << msg << "\");" << std::endl;
     }
   }
+}
+
+struct listen_fds_with_names {
+  public:
+  std::optional< std::string > get_fdname(int index) const {
+    if (index < fdnames.size()) {
+      return  fdnames[index];
+    }
+    return {};
+  }
+  const int num_sd_listen_fds;
+  const std::vector< std::string > fdnames;
+};
+
+const listen_fds_with_names parse_sd_listen_fds_with_names() {
+   char** names = NULL;
+   int num_sd_listen_fds = sd_listen_fds_with_names(1, &names);
+   std::vector< std::string > fdnames;
+   if (names) {
+     int i = 0;
+     while (names[i]) {
+       fdnames.push_back(std::string{names[i]});
+       ++i;
+     }
+     free(names);
+   }
+  return listen_fds_with_names{num_sd_listen_fds, fdnames};
 }
 
 int main(int argc, char *argv[])
@@ -184,8 +219,10 @@ int main(int argc, char *argv[])
   {
     const ParsedArgs parsed_args = parse_argv(argc, argv);
 
+    const listen_fds_with_names listen_info = parse_sd_listen_fds_with_names();
+
     int num_fds = sd_listen_fds(1);
-    if (num_fds < 1) {
+    if (listen_info.num_sd_listen_fds < 1) {
       throw std::runtime_error("This program needs to be started by a systemd service or by systemd-socket-activate. (LISTEN_FDS is not correctly set)");
     }
 
@@ -199,29 +236,30 @@ int main(int argc, char *argv[])
     std::vector < std::unique_ptr < server < asio::local::datagram_protocol > > > unix_dgram_servers;
     std::vector < std::unique_ptr < server < asio::local::datagram_protocol > > > vsock_dgram_servers;
 
-    for (int i = 0; i < num_fds; i++) {
+    for (int i = 0; i < listen_info.num_sd_listen_fds; i++) {
+      auto fdname = listen_info.get_fdname(i);
       int fd = SD_LISTEN_FDS_START + i;
       if (sd_is_socket(fd, AF_UNSPEC, SOCK_STREAM, 1)) {
-	co_spawn(io_context, listener(fd, parsed_args.debug), detached);
+	co_spawn(io_context, listener(fd, parsed_args.debug, fdname), detached);
       } else
       if (sd_is_socket(fd, AF_UNIX, SOCK_DGRAM, -1)) {
-        unix_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, parsed_args.debug, fd));
+        unix_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, parsed_args.debug, fdname, fd));
       } else
       if (sd_is_socket(fd, AF_VSOCK, SOCK_DGRAM, -1)) {
-        vsock_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, parsed_args.debug, fd));
+        vsock_dgram_servers.push_back(std::make_unique< server< asio::local::datagram_protocol > >(io_context,datagram_prot, parsed_args.debug, fdname, fd));
       } else
       if (sd_is_socket(fd, AF_INET, SOCK_DGRAM, -1)) {
-        udp_servers.push_back(std::make_unique< server< asio::ip::udp > >(io_context,asio::ip::udp::v4(), parsed_args.debug, fd));
+        udp_servers.push_back(std::make_unique< server< asio::ip::udp > >(io_context,asio::ip::udp::v4(), parsed_args.debug, fdname, fd));
       } else
       if (sd_is_socket(fd, AF_INET6, SOCK_DGRAM, -1)) {
-	udp_servers.push_back(std::make_unique< server < asio::ip::udp > >(io_context,asio::ip::udp::v6(), parsed_args.debug, fd));
+	udp_servers.push_back(std::make_unique< server < asio::ip::udp > >(io_context,asio::ip::udp::v6(), parsed_args.debug, fdname, fd));
       }
     }
     if (parsed_args.start_sleep) {
       const std::string msg = std::string("Sleeping ") + std::to_string(parsed_args.start_sleep) +
                               " second(s) as specified by the --start-sleep (-t) option";
       if (parsed_args.debug) {
-        std::cerr << msg << "\n";
+        std::cout << msg << std::endl;
       }
       log_sd_notify("STATUS=" + msg, parsed_args.sdnotify, parsed_args.debug);
       sleep(parsed_args.start_sleep);

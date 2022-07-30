@@ -22,13 +22,13 @@ template <typename PROTOCOL>
 class server
 {
 public:
-  server(asio::io_context& io_context, const PROTOCOL &prot, bool logdebug, int fd)
-    : socket_{io_context, prot, fd}, logdebug_{logdebug}
+  server(asio::io_context& io_context, const PROTOCOL &prot, bool logdebug, std::optional< std::string > fdname, int fd)
+    : socket_{io_context, prot, fd}, logdebug_{logdebug}, fdname_{fdname}
   {
     do_receive();
   }
-  server(asio::io_context& io_context, bool logdebug, int fd)
-    : socket_{io_context, fd}, logdebug_{logdebug}
+  server(asio::io_context& io_context, bool logdebug, std::optional< std::string > fdname, int fd)
+    : socket_{io_context, fd}, logdebug_{logdebug}, fdname_{fdname}
   {
     do_receive();
   }
@@ -39,10 +39,7 @@ public:
         asio::buffer(data_, max_length), sender_endpoint_,
         [this](std::error_code ec, std::size_t bytes_recvd)
         {
-	  if (logdebug_)
-	  {
-	    std::cout << "Bytes received = " << bytes_recvd << std::endl;
-	  }
+          log_handled_bytes(bytes_recvd, "received", fdname_, logdebug_);
           if (ec)
           {
             std::cerr << "Error while receiving. Error message = " << ec.message() << "\n";
@@ -64,10 +61,7 @@ public:
         asio::buffer(data_, length), sender_endpoint_,
         [this](std::error_code ec, std::size_t bytes_sent)
         {
-	  if (logdebug_)
-	  {
-	    std::cout << "Bytes sent = " << bytes_sent << std::endl;
-	  }
+          log_handled_bytes(bytes_sent, "sent", fdname_, logdebug_);
           if (ec)
           {
             std::cerr << "Error while sending. Error message = " << ec.message() << "\n";
@@ -78,6 +72,7 @@ public:
 
 private:
   const bool logdebug_;
+  const std::optional< std::string > fdname_;
   PROTOCOL::socket socket_;
   PROTOCOL::endpoint sender_endpoint_;
   enum { max_length = 1024 };
